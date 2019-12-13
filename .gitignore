@@ -1,0 +1,9 @@
+*.retry
+.idea
+*.iml
+*.swp
+extra.json
+__pycache__
+*.pyc
+.yamllint
+*.log

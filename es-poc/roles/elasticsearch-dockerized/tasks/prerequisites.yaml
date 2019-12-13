@@ -1,0 +1,12 @@
+- name: Install pip
+  yum:
+    state: latest
+    name: python-pip
+  become: true
+
+- name: Install required pip modules
+  pip:
+    name:
+      - docker
+      - requests
+  become: true

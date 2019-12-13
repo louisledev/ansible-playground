@@ -1,0 +1,45 @@
+---
+# tasks file for elasticsearch-dockerized
+# based on https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html
+
+- name: Install pre-requisites.
+  include: prerequisites.yaml
+
+
+- name: Set vm.max_map_count setting
+  sysctl:
+    name: vm.max_map_count
+    value: '262144'
+    state: present
+  become: true
+
+- name: Create data directory
+  file:
+    path: "{{ elasticsearch_dockerized__data_dir }}"
+    state: directory
+    mode: '0755'
+    owner: "philips"
+    group: "philips"
+  become: true
+
+- name: Start elastic search docker
+  docker_container:
+    name: "elasticsearch"
+    image: "{{ elasticsearch_dockerized__image_fullname }}"
+    user: "1000:1024" # Corresponding to philips:philips but if so specified, fails
+                      # with msg: unable to find user philips: no matching entries in passwd file
+    ulimits:
+      nofile:65535:65535
+      memlock=-1:-1
+    env:
+      discovery.type: "single-node"
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms8g -Xmx8g"
+    restart_policy: "unless-stopped"
+    volumes:
+      - "{{ elasticsearch_dockerized__data_dir }}:/usr/share/elasticsearch/data"
+#      - full_path_to/custom_elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    ports:
+      - "9200:9200"
+      - "9300:9300" 
+  become: true

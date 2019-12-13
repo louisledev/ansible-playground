@@ -1,0 +1,10 @@
+---
+- name: Add dev user
+  include: add_user.yml
+  vars:
+    new_user_username: "{{ keycloak_dev_user_username }}"
+    new_user_password: "{{ keycloak_dev_user_password }}"
+    new_user_email: "{{ keycloak_dev_user_email }}"
+    new_user_firstname: "{{ keycloak_dev_user_firstname }}"
+    new_user_lastname: "{{ keycloak_dev_user_lastname }}"
+  when: is_development 

@@ -1,0 +1,9 @@
+---
+- hosts: controlbox
+  vars:
+    
+  roles:
+    - role: docker 
+    - role: epel
+    - role: elasticsearch-dockerized
+        

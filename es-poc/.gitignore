@@ -1,0 +1,5 @@
+# roles includes with ansible galaxy
+roles/docker
+
+# temporary files
+tmp_inventory.yaml

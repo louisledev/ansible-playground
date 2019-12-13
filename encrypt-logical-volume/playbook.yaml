@@ -1,0 +1,52 @@
+---
+- hosts: all
+  become: true
+  vars:
+    dev: "/dev/sda"
+    # volume_group: "centos_centos-ks"
+    volume_group: "ksvg"
+    logical_volume: "homeencryptedvol"
+    mount_path: "/home"
+    keyfile_location: "/root/keyfile"
+    luks_container_name: "LUKS-home"
+        
+  tasks:
+  - name: Create logical volume
+    lvol:
+      vg: "{{ volume_group }}"
+      lv: "{{ logical_volume }}"
+      size: +100%FREE
+  
+  - name: Copy keyfile to target
+    copy:
+      src: keyfile
+      dest: "{{ keyfile_location }}"
+      owner: root
+      group: root
+      mode: 0600
+      
+  - name: Create and open LUKS container
+    luks_device:
+      device: "/dev/{{ volume_group }}/{{ logical_volume }}"
+      state: "opened"
+      keyfile: "{{ keyfile_location }}" 
+      name: "{{ luks_container_name }}"
+ 
+  - name: Create filesystem in LUKS container
+    filesystem:
+      dev: "/dev/mapper/{{ luks_container_name }}"
+      fstype: xfs
+    
+  - name: Mount LUKS container
+    mount:
+      path: "{{ mount_path }}"
+      src: "/dev/mapper/{{ luks_container_name }}"
+      fstype: xfs
+      state: mounted
+
+  - name: Edit cryptab to add keyfile
+    crypttab:
+      name: "{{ luks_container_name }}"
+      backing_device: "/dev/{{ volume_group }}/{{ logical_volume }}"
+      state: present
+      password: "{{ keyfile_location }}"

@@ -1,0 +1,101 @@
+- name: Wait for Keycloak to be ready
+  uri:
+    url: "{{ public_url }}/auth"
+    method: GET
+    status_code: 200
+    validate_certs: no
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 5
+
+- name: Login to Keycloak
+  uri:
+    url: "{{ public_url }}/auth/realms/master/protocol/openid-connect/token"
+    method: POST
+    body: "grant_type=password&client_id=admin-cli&username={{ keycloak_user }}&password={{ keycloak_password }}"
+    return_content: yes
+    status_code: 200
+    validate_certs: no
+  register: login_response
+
+- set_fact:
+    auth_header: "Bearer {{ login_response.json.access_token }}"
+
+- name: Check if test user exists
+  uri:
+    url: "{{ public_url }}/auth/admin/realms/{{ global_keycloak_ai_realm }}/users?briefRepresentation=true&username={{ _keycloak_new_user_username }}"
+    method: GET
+    return_content: yes
+    validate_certs: no
+    status_code: 200
+    headers:
+      Authorization: "{{ auth_header }}"
+  register: _keycloak_user_check
+  
+- name: Create fact user present
+  set_fact:
+      _keycloak_user_present: false
+
+- name: Update fact user present
+  set_fact:
+      _keycloak_user_present: "{{ _keycloak_user_present or (item.username ==  _keycloak_new_user_username) }}"
+  loop: "{{ _keycloak_user_check.json }}"
+
+- name: Display if user already present  
+  debug: 
+    msg: "user {{ _keycloak_new_user_username }} present: {{ _keycloak_user_present }}"
+
+- name: Show new user body
+  debug:
+    msg: "{{ lookup('template', 'new_user.json.j2') }}"
+  when: not _keycloak_user_present
+
+- name: Create new user 
+  uri:
+    url: "{{ public_url }}/auth/admin/realms/{{ global_keycloak_ai_realm }}/users"
+    method: POST
+    body: "{{ lookup('template', 'new_user.json.j2') | to_json }}"
+    return_content: yes
+    status_code: 200, 201
+    validate_certs: no
+    headers:
+      Authorization: "{{ auth_header }}"
+      Content-Type: application/json
+  register: create_user
+  when: not _keycloak_user_present
+
+- name: Get newly created user
+  uri:
+    url: "{{ public_url }}/auth/admin/realms/{{ global_keycloak_ai_realm }}/users?briefRepresentation=true&username={{ _keycloak_new_user_username }}"
+    method: GET
+    return_content: yes
+    validate_certs: no
+    status_code: 200
+    headers:
+      Authorization: "{{ auth_header }}"
+  register: _keycloak_new_user
+  when: not _keycloak_user_present
+
+- name: set _keycloak_new_user_id
+  set_fact:
+      _keycloak_new_user_id: "{{ item.id }}"
+  loop: "{{ _keycloak_new_user.json }}"
+  when: not _keycloak_user_present and item.username ==  _keycloak_new_user_username
+
+- debug:
+    msg: " _keycloak_new_user_id: {{ _keycloak_new_user_id }}"    
+  when: not _keycloak_user_present
+
+- name: Setup password for test user 
+  uri:
+    url: "{{ public_url }}/auth/admin/realms/{{ global_keycloak_ai_realm }}/users/{{ _keycloak_new_user_id }}/reset-password"
+    method: PUT
+    body: "{{ lookup('template', 'new_user_credential.json.j2') | to_json }}"
+    return_content: yes
+    status_code: 204
+    validate_certs: no
+    headers:
+      Authorization: "{{ auth_header }}"
+      Content-Type: application/json
+  when: not _keycloak_user_present

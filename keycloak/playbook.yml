@@ -1,0 +1,9 @@
+- hosts: all
+  gather_facts: no  
+
+  vars:
+    is_development: true
+
+  roles:
+    - role: keycloak
+    
