@@ -1,0 +1,46 @@
+---
+- hosts: all  
+  vars:
+    helm_binary_version: "2.14.1"
+    helm_package_filename: "helm-v{{ helm_binary_version }}-linux-amd64.tar.gz"
+    helm_download_url: "https://storage.googleapis.com/kubernetes-helm/{{ helm_package_filename }}"
+    helm_download_destination_path: "/tmp/helm-v{{ helm_binary_version }}-linux-amd64"
+    helm_download_checksum: "sha256:804f745e6884435ef1343f4de8940f9db64f935cd9a55ad3d9153d064b7f5896"
+
+  tasks:
+    - name: Create temporary folder for downloading the package
+      file:
+        path: "{{ helm_download_destination_path }}"
+        state: directory
+        mode: 0755
+      register: _helm_create_destination_folder_result
+  
+    - debug:
+        var: _helm_create_destination_folder_result
+
+    - name: Retrieve helm binary archive.
+      get_url:
+        url: "{{ helm_download_url }}"
+        dest: "{{ helm_download_destination_path }}"
+        mode: 0755
+        checksum: "{{ helm_download_checksum }}"
+      register: _helm_download_result
+
+    - debug:
+        var: _helm_download_result
+      
+    - name: Extract helm package
+      unarchive:
+          src: "{{ helm_download_destination_path }}/{{ helm_package_filename }}"
+          dest: "{{ helm_download_destination_path }}"
+          remote_src: yes
+          creates: "{{ helm_download_destination_path }}/linux-amd64/helm"
+      
+    - name: Copy helm binary into place.
+      copy: 
+        remote_src: yes
+        src: "{{ helm_download_destination_path }}/linux-amd64/helm"
+        dest: /usr/local/bin/helm
+        mode: 0755
+      become: yes
+

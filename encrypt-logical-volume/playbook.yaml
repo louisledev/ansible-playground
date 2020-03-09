@@ -4,13 +4,24 @@
   vars:
     dev: "/dev/sda"
     # volume_group: "centos_centos-ks"
-    volume_group: "ksvg"
-    logical_volume: "homeencryptedvol"
+    volume_group: "centos_centos--ks"
+    logical_volume: "rootvol"
     mount_path: "/home"
     keyfile_location: "/root/keyfile"
     luks_container_name: "LUKS-home"
         
   tasks:
+  - name: Iterate over mount points
+    debug:
+      msg: "{{ item }}"
+    loop: "{{ ansible_mounts }}"
+    failed_when: luks_container_name == ""
+
+  - name: fail
+    debug:
+      msg: "stop here"
+    failed_when: true
+  
   - name: Create logical volume
     lvol:
       vg: "{{ volume_group }}"

@@ -1,0 +1,11 @@
+---
+- hosts: localhost
+#  vars:
+#    docker_insecure_registries: [ "192.168.100.25:5000" ] 
+        
+  tasks:
+    - name: setting docker_options
+      set_fact:
+        docker_options: "{{ docker_insecure_registries | map('regex_replace', '^(.*)$', '--insecure-registry=\\1' ) | list | join(' ') }}"
+        
+    - debug: var=docker_options
