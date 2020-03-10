@@ -114,16 +114,6 @@
             path: "{{ helm_download_destination_path }}"
             state: absent
 
-    - name: Set the helm init command
-      set_fact:
-          _helm_init_command: "helm init --service-account tiller" 
-      when: _helm_existing_server_version is not defined
-
-    - name: Set the helm init command (upgrade)
-      set_fact:
-          _helm_init_command: "helm init --upgrade --service-account tiller" 
-      when: _helm_existing_server_version is defined
-
     - name: Set up Helm and Tiller.
       command: "helm init --service-account tiller"
       # with k8s 1.16.0 (kind), uncomment following:  
