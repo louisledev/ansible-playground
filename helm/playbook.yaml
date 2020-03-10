@@ -1,46 +1,174 @@
 ---
-- hosts: all  
+- hosts: localhost
   vars:
-    helm_binary_version: "2.14.1"
+    helm_binary_path: /usr/local/bin/helm
+    helm_binary_version: "2.16.1"
     helm_package_filename: "helm-v{{ helm_binary_version }}-linux-amd64.tar.gz"
     helm_download_url: "https://storage.googleapis.com/kubernetes-helm/{{ helm_package_filename }}"
     helm_download_destination_path: "/tmp/helm-v{{ helm_binary_version }}-linux-amd64"
-    helm_download_checksum: "sha256:804f745e6884435ef1343f4de8940f9db64f935cd9a55ad3d9153d064b7f5896"
+    helm_download_checksum: "sha256:7eebaaa2da4734242bbcdced62cc32ba8c7164a18792c8acdf16c77abffce202"
 
   tasks:
-    - name: Create temporary folder for downloading the package
-      file:
-        path: "{{ helm_download_destination_path }}"
-        state: directory
-        mode: 0755
-      register: _helm_create_destination_folder_result
-  
+    - name: Create Tiller ServiceAccount.
+      ignore_errors: yes 
+      k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: tiller
+            namespace: kube-system
+          
+    - name: Apply Tiller RBAC definition
+      ignore_errors: yes
+      k8s:
+        state: present
+        definition: "{{ lookup('file', 'files/tiller-rbac.yml') | from_yaml }}"
+
+    - name: Check if helm client is already present
+      stat:
+        path: '{{ helm_binary_path }}'
+      changed_when: false
+      register: _helm_binary_path_stat
+    
     - debug:
-        var: _helm_create_destination_folder_result
+        var: _helm_binary_path_stat
+    
+    - name: Get existing helm client version
+      shell: "{{ helm_binary_path }} version --client" 
+      when: _helm_binary_path_stat.stat.exists
+      register: _helm_client_version_output
+    
+    - name: Get helm server version
+      shell: "{{ helm_binary_path }} version --server" 
+      when: _helm_binary_path_stat.stat.exists
+      register: _helm_server_version_output
+      ignore_errors: yes
+    
+    - debug:
+        var: _helm_client_version_output
+      when: _helm_client_version_output is defined
+    
+    - set_fact:
+        _helm_existing_client_version: "{{ _helm_client_version_output.stdout | regex_search('SemVer:\"v(\\d+)\\.(\\d+)\\.(\\d+)\"') | string | regex_search('(\\d+)\\.(\\d+)\\.(\\d+)') }}"
+      when: _helm_client_version_output is defined
 
-    - name: Retrieve helm binary archive.
-      get_url:
-        url: "{{ helm_download_url }}"
-        dest: "{{ helm_download_destination_path }}"
-        mode: 0755
-        checksum: "{{ helm_download_checksum }}"
-      register: _helm_download_result
+    - name: Display existing helm client version
+      debug:
+        var: _helm_existing_client_version
+      when: _helm_existing_client_version is defined
 
     - debug:
-        var: _helm_download_result
-      
-    - name: Extract helm package
-      unarchive:
-          src: "{{ helm_download_destination_path }}/{{ helm_package_filename }}"
-          dest: "{{ helm_download_destination_path }}"
-          remote_src: yes
-          creates: "{{ helm_download_destination_path }}/linux-amd64/helm"
-      
-    - name: Copy helm binary into place.
-      copy: 
-        remote_src: yes
-        src: "{{ helm_download_destination_path }}/linux-amd64/helm"
-        dest: /usr/local/bin/helm
-        mode: 0755
-      become: yes
+        var: _helm_server_version_output
+      when: _helm_server_version_output is defined
+        
+    - set_fact:
+        _helm_existing_server_version: "{{ _helm_server_version_output.stdout | regex_search('SemVer:\"v(\\d+)\\.(\\d+)\\.(\\d+)\"') | string | regex_search('(\\d+)\\.(\\d+)\\.(\\d+)') }}"
+      when: _helm_server_version_output is defined and not _helm_server_version_output.failed
 
+    - name: Display existing helm server version
+      debug:
+        var: _helm_existing_server_version
+      when: _helm_existing_server_version is defined
+
+    - when: not _helm_existing_client_version is defined or _helm_existing_client_version != helm_binary_version
+      block:
+        - name: Create temporary folder for downloading the package
+          file:
+            path: "{{ helm_download_destination_path }}"
+            state: directory
+            mode: 0755
+          register: _helm_create_destination_folder_result
+          
+        - debug:
+            var: _helm_create_destination_folder_result
+        
+        - name: Retrieve helm binary archive.
+          get_url:
+            url: "{{ helm_download_url }}"
+            dest: "{{ helm_download_destination_path }}"
+            mode: 0755
+            checksum: "{{ helm_download_checksum }}"
+          register: _helm_download_result
+          
+        - debug:
+            var: _helm_download_result
+
+        - name: Extract helm package
+          unarchive:
+              src: "{{ helm_download_destination_path }}/{{ helm_package_filename }}"
+              dest: "{{ helm_download_destination_path }}"
+              remote_src: yes
+          
+        - name: Copy helm binary into place.
+          copy: 
+            remote_src: yes
+            src: "{{ helm_download_destination_path }}/linux-amd64/helm"
+            dest: "{{ helm_binary_path }}"
+            mode: 0755
+          become: yes
+        
+        - name: Cleanup downloaded artifacts
+          file:
+            path: "{{ helm_download_destination_path }}"
+            state: absent
+
+    - name: Set the helm init command
+      set_fact:
+          _helm_init_command: "helm init --service-account tiller" 
+      when: _helm_existing_server_version is not defined
+
+    - name: Set the helm init command (upgrade)
+      set_fact:
+          _helm_init_command: "helm init --upgrade --service-account tiller" 
+      when: _helm_existing_server_version is defined
+
+    - name: Set up Helm and Tiller.
+      command: "helm init --service-account tiller"
+      # with k8s 1.16.0 (kind), uncomment following:  
+      #shell: "helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -"
+      # However, not breaking with some ai4r helm (deployment and release has change versions) 
+      register: helm_init_result
+      changed_when: "'already installed' not in helm_init_result.stdout"
+      when: _helm_existing_server_version is not defined
+      
+    - name: Set up Helm and Tiller (upgrade).
+      command: "helm init --upgrade --service-account tiller"
+      # with k8s 1.16.0 (kind), uncomment following:  
+      #shell: "helm init --service-account tiller --override spec.selector.matchLabels.'name'='tiller',spec.selector.matchLabels.'app'='helm' --output yaml | sed 's@apiVersion: extensions/v1beta1@apiVersion: apps/v1@' | kubectl apply -f -"
+      # However, not breaking with some ai4r helm (deployment and release has change versions) 
+      register: helm_init_result
+      changed_when: "'already installed' not in helm_init_result.stdout"
+      when: 
+        - _helm_existing_server_version is defined
+        - _helm_existing_server_version != helm_binary_version 
+    
+    - name: Get Tiller's ClusterIP.
+      ignore_errors: yes
+      k8s:
+        api_version: v1
+        kind: Service
+        name: tiller-deploy
+        namespace: kube-system
+      register: tiller_service
+    
+    - name: Set the Helm host and port.
+      ignore_errors: yes
+      set_fact:
+        helm_host: "{{ tiller_service.result.spec.clusterIP }}"
+        helm_port: "{{ tiller_service.result.spec.ports[0].port }}"
+    
+    - name: debug
+      ignore_errors: yes
+      debug:
+        msg:
+        - "{{ helm_host }}"
+        - "{{ helm_port }}"
+    
+    - name: Wait for Tiller to become responsive.
+      command: helm list
+      register: _helm_list_result
+      until: _helm_list_result is succeeded
+      retries: 60 
+      delay: 5

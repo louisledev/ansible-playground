@@ -27,10 +27,7 @@ echo $TARGET_HOST > $INV_FILE
 # running playbook
 echo executing: ansible-playbook -i $INV_FILE $PLAYBOOK
 ansible-playbook -i $INV_FILE $PLAYBOOK \
-    -e 'ansible_connection=ssh' \
-    -e "ansible_ssh_user=$ANSIBLE_USER" \
-    -e "ansible_ssh_pass=$ANSIBLE_PASS" \
-    -e "ansible_become_pass=$ANSIBLE_PASS" 
+
 rc=$?
 
 # removing temporary inventory file
