@@ -1,11 +1,26 @@
 ---
 - hosts: localhost
-#  vars:
-#    docker_insecure_registries: [ "192.168.100.25:5000" ] 
-        
+  gather_facts: no        
   tasks:
+    - name: get port with urlsplit
+      set_fact:
+        splitted_port: "{{ 'https://user:password@www.acme.com/dir/index.html?query=term#fragment' | urlsplit('port') }}"
+
+    - debug: var=splitted_port
+
+    - name: get all urlsplit results
+      set_fact:
+        splitted_url: "{{ 'https://user:password@www.acme.com/dir/index.html?query=term#fragment' | urlsplit }}"
+
+    - debug: var=splitted_url
+
+    - name: set docker_insecure_registries
+      set_fact: docker_insecure_registries="[ '192.168.100.26:5000']"
+
     - name: setting docker_options
       set_fact:
         docker_options: "{{ docker_insecure_registries | map('regex_replace', '^(.*)$', '--insecure-registry=\\1' ) | list | join(' ') }}"
         
     - debug: var=docker_options
+
+
