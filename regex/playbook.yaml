@@ -4,6 +4,33 @@
   tasks:
     - name: get port with urlsplit
       set_fact:
+        my_param: 200
+
+    - set_fact:
+        helm2_version_output: "&version.Version{SemVer:\"v2.10.0\", GitCommit:\"9ad53aac42165a5fadc6c87be0dea6b115f93090\", GitTreeState:\"clean\"}"
+
+    - set_fact:
+        helm2_client_version: "{{ helm2_version_output | regex_search('(Version|SemVer):\"v(\\d+)\\.(\\d+)\\.(\\d+)\"') | string | regex_search('v(\\d+)\\.(\\d+)\\.(\\d+)') }}"
+      
+    - debug: var=helm2_client_version
+    
+    - set_fact:
+        helm3_version_output: "version.BuildInfo{Version:\"v3.2.4\", GitCommit:\"0ad800ef43d3b826f31a5ad8dfbb4fe05d143688\", GitTreeState:\"clean\", GoVersion:\"go1.13.12\"}"
+
+    - set_fact:
+        helm3_client_version: "{{ helm3_version_output | regex_search('(Version|SemVer):\"v(\\d+)\\.(\\d+)\\.(\\d+)\"') | string | regex_search('v(\\d+)\\.(\\d+)\\.(\\d+)') }}"
+    
+    - debug: var=helm3_client_version
+
+    - name: use quiet to avoid verbose output
+      assert:
+        that:
+          - my_param <= 100
+          - my_param >= 0
+        quiet: false
+
+    - name: get port with urlsplit
+      set_fact:
         splitted_port: "{{ 'https://user:password@www.acme.com/dir/index.html?query=term#fragment' | urlsplit('port') }}"
 
     - debug: var=splitted_port
