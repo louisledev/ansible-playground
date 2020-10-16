@@ -1,0 +1,53 @@
+---
+- hosts: masters
+  gather_facts: no
+  become: yes
+  run_once: true
+  
+  tasks:
+    - name: Check that kubeconfig path is defined
+      fail: 
+        msg: "global_kubeconfig_path is not defined"
+      when: global_kubeconfig_path is not defined
+
+    - name: Check that kubeconfig path is properly set
+      fail: 
+        msg: "global_kubeconfig_path is not set"
+      when: global_kubeconfig_path == ""
+
+    - name: "Copy .kube/config from master"
+      fetch:
+        src: "/home/{{ ansible_ssh_user }}/.kube/config"
+        dest: "{{ global_kubeconfig_path }}"
+        flat: yes
+      tags:
+        - copy_kubeconfig
+
+
+- hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    istio_namespace:  ai4r-ci-istio
+  tasks:
+  - name: lookup secret
+    set_fact:
+      _istio_secrets: "{{ lookup('k8s', kind='Secret', namespace=istio_namespace, resource_name='istio-ingressgateway-certs') }}"
+    register: _lookup_result
+
+  - name: 
+    debug:
+      var:
+        _lookup_result
+  
+  - name:
+    debug:
+      msg: "Found at least a secret: {{ _istio_secrets }}"
+    when: _istio_secrets|length>0
+
+  - name:
+    fail:
+      msg: "Did not find a secret!"
+    when: _istio_secrets|length==0
+  

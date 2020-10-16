@@ -7,3 +7,5 @@ __pycache__
 *.pyc
 .yamllint
 *.log
+
+k8s/cluster.config
