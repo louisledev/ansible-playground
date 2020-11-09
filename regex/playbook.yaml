@@ -2,6 +2,20 @@
 - hosts: localhost
   gather_facts: no        
   tasks:
+    - name: get relative path
+      set_fact:
+        my_rel_path: "{{ '/etc/subdir/some_file.txt' | relpath('/etc') }}"
+
+    - debug:
+        var: my_rel_path 
+
+    - name: construct path
+      set_fact:
+        my_path: "{{ ('some_dir', 'some_file.txt') | path_join }}"
+
+    - debug:
+        var: my_path 
+
     - name: get port with urlsplit
       set_fact:
         my_param: 200
@@ -22,12 +36,21 @@
     
     - debug: var=helm3_client_version
 
-    - name: use quiet to avoid verbose output
-      assert:
+    - assert:
+        that: 
+          - helm3_client_version is not defined or helm3_client_version is version('v3.0.0', '>=')
+        fail_msg: "helm client present but version is less than 3."
+        success_msg: "helm client not yet installed or already at least version 3"
+
+    - set_fact:
+        helm3_client_major_version: "{{ helm3_client_version | regex_search('v(\\d+)\\.') | string | regex_search('(\\d+)') }}"
+
+    - debug: var=helm3_client_major_version
+
+    - assert: 
         that:
-          - my_param <= 100
-          - my_param >= 0
-        quiet: false
+          - helm3_client_major_version|int == 3
+        fail_msg: "helm client is not version 3. Either removed existing helm client or upgrade to helm3"
 
     - name: get port with urlsplit
       set_fact:
