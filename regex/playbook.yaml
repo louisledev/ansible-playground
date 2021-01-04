@@ -1,7 +1,69 @@
 ---
 - hosts: localhost
   gather_facts: no        
+  environment: "{{ proxy_environment | d({}) }}"
+
+  vars:
+    proxy_environment:
+      http_proxy: http://emea.zscaler.philips.com:9480
+      https_proxy: http://emea.zscaler.philips.com:9480
+      no_proxy: localhost,127.0.0.1,artifactory-ehv.ta.philips.com,tfsemea1.ta.philips.com,.artifactory.pic.philips.com
+    _nvidia_driver_download_dir: "/tmp/nvidia"
+    nvidia_driver_offline_installation: false
+    nvidia_driver_offline_installation_folder: ""
+    nvidia_driver_passthrough_version: "440.64.00"
+    nvidia_driver_grid_version: "450.51.05"
+    nvidia_driver_kernel_package_version: "3.10.0-1127.19.1.el7.x86_64"
+    nvidia_driver_passhtrough_installer_base_url: "https://artifactory-ehv.ta.philips.com/artifactory/icap-ai4rad-sandbox/nvidia/nvidia-passthrough-driver"
+    nvidia_driver_grid_installer_base_url: "https://artifactory-ehv.ta.philips.com/artifactory/icap-ai4rad-nightly/nvidia-grid-driver"
+
   tasks:
+    - name: breaking a loop
+      command: >
+        /bin/false
+      register: loop_result
+      with_items:
+        - "un"
+        - "deux"
+        - "trois"
+      when: loop_result is not defined or loop_result.rc != 0
+
+    - name: check we can access env var
+      debug:
+        msg: "http_proxy: {{ proxy_environment.http_proxy }}"
+
+    - name: Set installer filename
+      set_fact:
+        buildagent_location: "emea"
+
+    - name: Create acceptable location list
+      set_fact: 
+        buildagent_acceptable_locations: "{{buildagent_acceptable_locations | default([]) + [item]}}" 
+      with_items: 
+        - emea
+        - apac
+
+    - name: Check that buildagent_location has a valid value
+      assert:
+        that: buildagent_location in buildagent_acceptable_locations
+        fail_msg: "unsupported location: {{ buildagent_location }}"
+
+    - name: Set installer filename
+      set_fact:
+        _nvidia_driver_installer_filename: "NVIDIA-Linux-x86_64-{{ nvidia_driver_passthrough_version }}.run"
+    
+    - debug:
+        var: global_regcred_api_key 
+    
+    - name: Retrieve nvidia driver installation package
+      get_url:
+        url: "{{ nvidia_driver_passhtrough_installer_base_url }}/{{ nvidia_driver_passthrough_version }}/{{ _nvidia_driver_installer_filename }}"
+        dest: "{{ _nvidia_driver_download_dir }}"
+        validate_certs: no
+        mode: 'u+x,g+x'
+        headers: 
+          X-JFrog-Art-Api: "{{ global_regcred_api_key }}"
+
     - name: get relative path
       set_fact:
         my_rel_path: "{{ '/etc/subdir/some_file.txt' | relpath('/etc') }}"
